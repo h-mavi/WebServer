@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Upload image</title>
+  <style>
+    :root{
+      --bg:#f5f5f7;
+      --card:#ffffff;
+      --accent:#ce7231;
+      --muted:#6b7280;
+      --success:#16a34a;
+      --danger:#b91c1c;
+    }
+    /* Use border-box everywhere to avoid sizing surprises */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html,body {
+      min-height: 100vh;
+      margin:0;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background-image: url("/photos/home.webp");
+      background-position: center center;
+      background-repeat: no-repeat;
+      background-size: cover;
+      color:#111;
+    }
+
+    /* Keep a simple wrapper but don't force extra viewport height (prevents scrollbar) */
+    .wrap {
+      min-height: 100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:32px
+    }
+    .card {text-align: center;
+      width:100%;
+      max-width:640px;
+      background:var(--card);
+      border-radius:12px;
+      padding:2rem;
+      box-shadow:0 12px 36px rgba(16,24,40,.08)
+    }
+    h1 {margin:0 0 8px; font-size:1.25rem}
+    p.lead{margin:0 0 16px;color:var(--muted)}
+
+    /* Drop area */
+    .drop {
+      border:2px dashed #E6E6EA;
+      border-radius:10px;
+      padding:22px;
+      text-align:center;
+      cursor:pointer;
+      transition:all .15s ease;
+      display:flex;
+      align-items:center;
+      gap:18px
+    }
+    .drop .col{flex:1}
+    .drop .icon
+    {
+      width:64px;
+      height:64px;
+      border-radius:10px;
+      background:linear-gradient(180deg,#fff,#FCF8F6);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:700;
+      color:var(--accent);
+      border:1px solid #F0E7E0
+    }
+    .drop.dragover {
+      border-color:var(--accent);
+      background:rgba(206,114,49,0.02);
+      transform:translateY(-2px)
+    }
+    input[type=file]{display:none}
+
+    /* Controls */
+    .controls {
+      display:flex;
+      gap:12px;
+      margin-top:16px;
+      align-items:center
+    }
+    button {
+      background:var(--accent);
+      color:#fff;
+      border:none;
+      padding:10px 16px;
+      border-radius:8px;
+      cursor:pointer;
+      font-family: inherit;
+      font-weight:600
+    }
+    button[disabled]{opacity:.6;cursor:not-allowed}
+    .status{font-size:0.95rem;color:var(--muted)}
+    
+    /* Preview */
+    .preview-wrap {
+      margin-top:16px;
+      display:flex;
+      gap:16px;
+      align-items:flex-start
+    }
+    img.preview {
+      max-width:320px;
+      max-height:320px;
+      border-radius:8px;
+      display:block;
+      object-fit:cover;
+      border:1px solid #eee}
+    .meta{flex:1}
+    .meta .name{font-weight:600}
+    .notice{margin-top:10px;color:var(--muted);font-size:0.9rem}
+    .meta .small{color:var(--muted);font-size:0.95rem;margin-top:6px}
+    @media (max-width:640px){
+      .drop{flex-direction:column;align-items:center}
+      .preview-wrap{flex-direction:column}
+      img.preview{max-width:100%}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <main class="card" role="main">
+      <h1>Here you can test the POST images!</h1>
+      <p class="lead">Select an image to upload (or drag & drop it on the box). This page doesn't use any CGI.</p>
+      <p>
+          <a href="/" style="display:inline-block;margin-top:1rem;padding:0.6rem 1rem;border-radius:6px;background:#ce7231;color:#fff;text-decoration:none;font-weight:600;">Return home</a>
+      </p>
+      <label class="drop" id="dropZone" for="fileInput" aria-label="Drop image here">
+        <div class="col">
+          <div style="font-weight:700" id="dropText">Click or drop an image here</div>
+          <div class="notice">Any images supported (server limit may apply)</div>
+        </div>
+        <input id="fileInput" type="file" name="file" accept="image/*">
+      </label>
+      <div class="controls">
+        <button id="uploadBtn" type="button" disabled>Upload</button>
+        <button id="deleteBtn" type="button" disabled style="background:#9b2f2f;color:#fff">Delete</button>
+        <button id="downloadBtn" type="button" disabled style="background:#0891b2;color:#fff">Download</button>
+        <div id="status" class="status" aria-live="polite"></div>
+      </div>
+      <div id="previewArea" class="preview-wrap" style="display:none">
+        <img id="preview" class="preview" alt="Image preview">
+        <div class="meta">
+          <div class="name" id="fileName"></div>
+          <div class="small" id="fileInfo"></div>
+        </div>
+      </div>
+      <!-- Galleria: mostra le immagini caricate dalla directory /upload -->
+      <hr style="margin-top:20px;margin-bottom:12px;border:none;border-top:1px solid #eee">
+      <section id="gallerySection">
+        <h2 style="margin:0 0 8px;font-size:1.1rem">Gallery</h2>
+        <p class="lead" style="margin-top:0;margin-bottom:8px">The saved images are shown here. Click them to select, then press the button <code>Delete</code> to erase them in the server memory.</p>
+        <button id="resetGallery" type="button" style="margin-bottom:10px;background:#e5e7eb;color:#111">Local gallery reset [DEBUG]</button>
+        <div id="galleryGrid" style="display:flex;flex-wrap:wrap;gap:12px"></div>
+        <div id="galleryMsg" class="notice" style="margin-top:10px"></div>
+      </section>
+    </main>
+  </div>
+  <script>
+    (function(){
+      var fileInput = document.getElementById('fileInput');
+      var drop = document.getElementById('dropZone');
+      var preview = document.getElementById('preview');
+      var status = document.getElementById('status');
+      var uploadBtn = document.getElementById('uploadBtn');
+      var deleteBtn = document.getElementById('deleteBtn');
+      var downloadBtn = document.getElementById('downloadBtn');
+      var resetGalleryBtn = document.getElementById('resetGallery');
+      var previewArea = document.getElementById('previewArea');
+      var fileNameEl = document.getElementById('fileName');
+      var fileInfoEl = document.getElementById('fileInfo');
+      var currentFile = null;
+      var droppedResolvedName = null;
+      function resetState(){
+        currentFile = null;
+        droppedResolvedName = null;
+        preview.src = '';
+        previewArea.style.display = 'none';
+        fileNameEl.textContent = '';
+        fileInfoEl.textContent = '';
+        uploadBtn.disabled = true;
+        deleteBtn.disabled = true;
+        downloadBtn.disabled = true;
+        status.textContent = '';
+      }
+      function readableBytes(bytes){
+        if (bytes < 1024) return bytes + ' B';
+        var k = 1024, sizes = ['KB','MB','GB'];
+        var i = Math.floor(Math.log(bytes) / Math.log(k));
+        return (bytes / Math.pow(k,i)).toFixed(2) + ' ' + sizes[i-1];
+      }
+      function showPreview(file){
+        var reader = new FileReader();
+        reader.onload = function(e){ preview.src = e.target.result; previewArea.style.display = 'flex'; };
+        reader.readAsDataURL(file);
+      }
+      fileInput.addEventListener('change', function(e){
+        if (!e.target.files || !e.target.files[0]) { resetState(); return; }
+        var f = e.target.files[0];
+        if (!f.type.startsWith('image/')) { status.textContent = 'Please select an image file.'; resetState(); return; }
+        currentFile = f;
+        fileNameEl.textContent = f.name;
+        fileInfoEl.textContent = f.type + ' • ' + readableBytes(f.size);
+        showPreview(currentFile);
+        uploadBtn.disabled = false;
+        deleteBtn.disabled = false;
+        downloadBtn.disabled = false;
+        status.textContent = '';
+      });
+      ['dragenter','dragover'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); drop.classList.add('dragover'); }); });
+      ['dragleave','drop'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); drop.classList.remove('dragover'); }); });
+      drop.addEventListener('drop', function(e){
+        var dt = e.dataTransfer; if (!dt) return;
+        var f = dt.files[0]; if (!f) return;
+        // populate the native input's FileList if possible (not writable in all browsers), but we can proceed
+        try { fileInput.files = dt.files; } catch(ignore) {}
+        if (!f.type.startsWith('image/')) { status.textContent = 'Only image files are accepted.'; resetState(); return; }
+        // tenta di risolvere il nome corretto usando l'indice locale della gallery
+        // (es. quando il browser trasporta il file come .jpg ma nel server è .jpeg)
+        try {
+          var list = loadImageIndex();
+          var base = (f.name || '').replace(/\.[^/.]+$/, '');
+          var found = null;
+          for (var i = 0; i < list.length; i++){
+            if ((list[i] || '').replace(/\.[^/.]+$/, '') === base) { found = list[i]; break; }
+          }
+          droppedResolvedName = found;
+        } catch(ignore) { droppedResolvedName = null; }
+        currentFile = f;
+        fileNameEl.textContent = f.name;
+        fileInfoEl.textContent = f.type + ' • ' + readableBytes(f.size);
+        showPreview(f);
+        uploadBtn.disabled = false;
+        deleteBtn.disabled = false;
+        downloadBtn.disabled = false;
+        status.textContent = '';
+      });
+      uploadBtn.addEventListener('click', function(){
+        if (!currentFile){ status.textContent = 'Please choose a file first.'; return; }
+        status.textContent = 'Uploading...';
+        uploadBtn.disabled = true;
+        deleteBtn.disabled = true;
+        var fd = new FormData();
+        fd.append('file', currentFile, currentFile.name);
+        fetch('/upload/image_post', { method: 'POST', body: fd })
+          .then(function(resp){
+            return resp.text().then(function(t){ return { ok: resp.ok, status: resp.status, text: t }; });
+          })
+          .then(function(r){
+            if (r.ok) { status.textContent = 'Upload successful (status ' + r.status + ')'; status.style.color = 'var(--success)'; }
+            else { status.textContent = 'Upload failed: ' + r.status + ' - ' + r.text; status.style.color = 'var(--danger)'; }
+            uploadBtn.disabled = false;
+            deleteBtn.disabled = false;
+            if (r.ok) {
+              // salva il nome dell'immagine nella gallery (localStorage) e aggiorna
+              // il server potrebbe aver cambiato l'estensione (.jpg/.jpeg), quindi
+              // risolvi il nome esatto via HEAD e poi aggiungi l'esatto nome al indice
+              try {
+                findExistingName(currentFile && currentFile.name).then(function(resolved){
+                  try { addImageToIndex(resolved || (currentFile && currentFile.name)); } catch(e){}
+                  renderGallery();
+                }).catch(function(){ try { addImageToIndex(currentFile && currentFile.name); } catch(e){}; renderGallery(); });
+              } catch(err) { try { addImageToIndex(currentFile && currentFile.name); } catch(e){}; renderGallery(); }
+            }
+          })
+          .catch(function(err){ status.textContent = 'Network error: ' + err.message; status.style.color = 'var(--danger)'; uploadBtn.disabled = false; });
+      });
+
+      // Delete selected file (client request). Sends DELETE to /upload with JSON { filename }
+      deleteBtn.addEventListener('click', function(){
+        if (!currentFile){ status.textContent = 'No file selected to delete.'; return; }
+        status.textContent = 'Deleting...';
+        deleteBtn.disabled = true;
+        uploadBtn.disabled = true;
+        var name = (typeof currentFile === 'string') ? currentFile : (droppedResolvedName || (currentFile && currentFile.name));
+        // risolvi possibili alternative (.jpg/.jpeg) prima di inviare DELETE
+        findExistingName(name).then(function(resolved){
+          var targetName = resolved || name;
+          var target = '/upload/' + encodeURIComponent(targetName);
+          fetch(target, { method: 'DELETE' })
+          .then(function(resp){ return resp.text().then(function(t){ return { ok: resp.ok, status: resp.status, text: t }; }); })
+          .then(function(r){
+            if (r.ok) {
+              status.textContent = 'Delete successful (status ' + r.status + ')';
+              status.style.color = 'var(--success)';
+              try { removeImageFromIndex(targetName); } catch(e){}
+              renderGallery();
+              resetState();
+            } else {
+              status.textContent = 'Delete failed: ' + r.status + ' - ' + r.text;
+              status.style.color = 'var(--danger)';
+              deleteBtn.disabled = false;
+              uploadBtn.disabled = false;
+            }
+          })
+          .catch(function(err){ status.textContent = 'Network error: ' + err.message; status.style.color = 'var(--danger)'; deleteBtn.disabled = false; uploadBtn.disabled = false; });
+        }).catch(function(){
+          // fallback: tenta con il nome originale
+          var target = '/upload/' + encodeURIComponent(name);
+          fetch(target, { method: 'DELETE' })
+          .then(function(resp){ return resp.text().then(function(t){ return { ok: resp.ok, status: resp.status, text: t }; }); })
+          .then(function(r){
+            if (r.ok) { try { removeImageFromIndex(name); } catch(e){}; renderGallery(); resetState(); status.textContent = 'Delete successful (status ' + r.status + ')'; status.style.color = 'var(--success)'; }
+            else { status.textContent = 'Delete failed: ' + r.status + ' - ' + r.text; status.style.color = 'var(--danger)'; deleteBtn.disabled = false; uploadBtn.disabled = false; }
+          })
+          .catch(function(err){ status.textContent = 'Network error: ' + err.message; status.style.color = 'var(--danger)'; deleteBtn.disabled = false; uploadBtn.disabled = false; });
+        });
+      });
+
+      // Download selected file
+      downloadBtn.addEventListener('click', function(){
+        if (!currentFile){ status.textContent = 'No file selected to download.'; return; }
+        var name = (typeof currentFile === 'string') ? currentFile : (droppedResolvedName || (currentFile && currentFile.name));
+        findExistingName(name).then(function(resolved){
+          var targetName = resolved || name;
+          var link = document.createElement('a');
+          link.href = '/upload/' + encodeURIComponent(targetName);
+          link.download = targetName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          status.textContent = 'Download started.';
+          status.style.color = 'var(--success)';
+        }).catch(function(){
+          var link = document.createElement('a');
+          link.href = '/upload/' + encodeURIComponent(name);
+          link.download = name;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          status.textContent = 'Download started.';
+          status.style.color = 'var(--success)';
+        });
+      });
+      
+      // ---------- Galleria client-side (usa localStorage per tenere traccia dei file caricati)
+      var GALLERY_KEY = 'uploadedImages_v1';
+      var selectedImage = null;
+      function loadImageIndex(){
+        try { var raw = localStorage.getItem(GALLERY_KEY); return raw ? JSON.parse(raw) : []; } catch(e){ return []; }
+      }
+      function saveImageIndex(list){ try { localStorage.setItem(GALLERY_KEY, JSON.stringify(list)); } catch(e){} }
+      function addImageToIndex(name){ if (!name) return; var list = loadImageIndex(); if (list.indexOf(name) === -1) { list.push(name); saveImageIndex(list); } }
+      function removeImageFromIndex(name){ if (!name) return; try { var list = loadImageIndex(); var changed = false; var i = list.indexOf(name); while (i !== -1){ list.splice(i,1); changed = true; i = list.indexOf(name); } if (changed) saveImageIndex(list); } catch(e){} }
+
+      function altExt(name){
+        if (!name) return null;
+        if (/\.jpeg$/i.test(name)) return name.replace(/\.jpeg$/i, '.jpg');
+        if (/\.jpg$/i.test(name)) return name.replace(/\.jpg$/i, '.jpeg');
+        return null;
+      }
+
+      function findExistingName(name){
+        // returns a Promise resolving to the existing filename (may be same as name or alternate), or null
+        if (!name) return Promise.resolve(null);
+        function checkUrl(url){
+          // The server does not support HEAD. Use a small ranged GET first
+          // (Range: bytes=0-0) to check for existence, then fall back to a normal GET.
+          return fetch(url, { method: 'GET', headers: { 'Range': 'bytes=0-0' } }).then(function(rg){
+            return (rg && (rg.ok || rg.status === 206));
+          }).catch(function(){
+            return fetch(url, { method: 'GET' }).then(function(rg2){ return (rg2 && rg2.ok); }).catch(function(){ return false; });
+          });
+        }
+        var origUrl = '/upload/' + encodeURIComponent(name);
+        var alt = altExt(name);
+        return checkUrl(origUrl).then(function(ok){
+          if (ok) return name;
+          if (!alt) return null;
+          var altUrl = '/upload/' + encodeURIComponent(alt);
+          return checkUrl(altUrl).then(function(ok2){ return ok2 ? alt : null; });
+        });
+      }
+
+      function renderGallery(){
+        var grid = document.getElementById('galleryGrid');
+        var msg = document.getElementById('galleryMsg');
+        grid.innerHTML = '';
+        var list = loadImageIndex();
+        if (!list.length){ msg.textContent = 'No images yet.'; return; } else { msg.textContent = ''; }
+        list.forEach(function(name){
+          var wrap = document.createElement('div');
+          wrap.style.width = '120px';
+          wrap.style.cursor = 'pointer';
+          wrap.style.textAlign = 'center';
+          wrap.setAttribute('tabindex','0');
+          var img = document.createElement('img');
+          img.src = '/upload/' + encodeURIComponent(name);
+          img.alt = name;
+          img.style.width = '120px';
+          img.style.height = '80px';
+          img.style.objectFit = 'cover';
+          img.style.borderRadius = '8px';
+          img.style.border = '2px solid transparent';
+          img.className = 'gallery-thumb';
+          var lbl = document.createElement('div'); lbl.textContent = name; lbl.style.fontSize = '0.8rem'; lbl.style.marginTop = '6px'; lbl.style.wordBreak = 'break-word';
+          wrap.appendChild(img);
+          wrap.appendChild(lbl);
+          // click/toggle selection
+          wrap.addEventListener('click', function(e){
+            // toggle
+            if (selectedImage === name){ selectedImage = null; img.style.borderColor = 'transparent'; wrap.style.opacity = '1'; }
+            else { // deselect previous
+              var prev = document.querySelector('.gallery-thumb.selected'); if (prev) { prev.classList.remove('selected'); prev.style.borderColor = 'transparent'; }
+              selectedImage = name; img.style.borderColor = 'var(--accent)'; img.classList.add('selected');
+            }
+          });
+          // support keyboard selection
+          wrap.addEventListener('keydown', function(ev){ if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); wrap.click(); } });
+          grid.appendChild(wrap);
+        });
+      }
+
+      // reset only the local gallery index (non cancella i file sul server)
+      resetGalleryBtn.addEventListener('click', function(){
+        if (!confirm('Svuotare la galleria locale salvata nel browser?\n')) return;
+        try { localStorage.removeItem(GALLERY_KEY); } catch(e){}
+        selectedImage = null;
+        renderGallery();
+        status.textContent = 'Galleria locale resettata.\nI file sul server restano invariati.';
+        status.style.color = 'var(--success)';
+      });
+
+      // delete selected image via Delete key
+      window.addEventListener('keydown', function(ev){
+        if (ev.key === 'Delete' && selectedImage){
+          ev.preventDefault();
+          if (!confirm('Eliminare "' + selectedImage + '"?')) return;
+          // risolvi il nome esatto sul server prima di eliminare
+          findExistingName(selectedImage).then(function(resolved){
+            var targetName = resolved || selectedImage;
+            var target = '/upload/' + encodeURIComponent(targetName);
+            fetch(target, { method: 'DELETE' })
+            .then(function(resp){ return resp.text().then(function(t){ return { ok: resp.ok, status: resp.status, text: t }; }); })
+            .then(function(r){ if (r.ok){ removeImageFromIndex(targetName); selectedImage = null; renderGallery(); document.getElementById('status').textContent = 'Eliminazione avvenuta.'; document.getElementById('status').style.color = 'var(--success)'; } else { document.getElementById('status').textContent = 'Delete failed: ' + r.status + ' - ' + r.text; document.getElementById('status').style.color = 'var(--danger)'; } })
+            .catch(function(err){ document.getElementById('status').textContent = 'Network error: ' + err.message; document.getElementById('status').style.color = 'var(--danger)'; });
+          }).catch(function(){
+            var target = '/upload/' + encodeURIComponent(selectedImage);
+            fetch(target, { method: 'DELETE' })
+            .then(function(resp){ return resp.text().then(function(t){ return { ok: resp.ok, status: resp.status, text: t }; }); })
+            .then(function(r){ if (r.ok){ removeImageFromIndex(selectedImage); selectedImage = null; renderGallery(); document.getElementById('status').textContent = 'Eliminazione avvenuta.'; document.getElementById('status').style.color = 'var(--success)'; } else { document.getElementById('status').textContent = 'Delete failed: ' + r.status + ' - ' + r.text; document.getElementById('status').style.color = 'var(--danger)'; } })
+            .catch(function(err){ document.getElementById('status').textContent = 'Network error: ' + err.message; document.getElementById('status').style.color = 'var(--danger)'; });
+          });
+        }
+      });
+
+      // initialize gallery on load
+      renderGallery();
+
+      // initialize
+      resetState();
+    })();
+  </script>
+</body>
+</html>
