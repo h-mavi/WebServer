@@ -1,4 +1,6 @@
-# WebServer
+*This project has been created as part of the 42 curriculum by mbiagi and mfanelli*
+
+# WebServer <img src="https://42cv.dev/api/badge/cmocr0rwf00040ko9gjxazgmo/project/4683563" align="right"/>
 
 A lightweight HTTP/1.1 web server written in C++98, inspired by nginx. Built as part of the 42 School curriculum, it handles multiple virtual servers, CGI execution, file uploads, cookie sessions, and more — all through a single non-blocking event loop powered by `epoll`.
 
